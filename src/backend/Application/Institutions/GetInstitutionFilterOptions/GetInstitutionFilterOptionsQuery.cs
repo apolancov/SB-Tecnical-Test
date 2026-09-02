@@ -1,0 +1,3 @@
+namespace Application.Institutions.GetInstitutionFilterOptions;
+
+public sealed record GetInstitutionFilterOptionsQuery;

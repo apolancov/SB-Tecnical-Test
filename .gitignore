@@ -1,0 +1,8 @@
+# Local-only development secrets.
+# The committed `.env.example` documents every variable and ships with safe
+# placeholders. Real values for the development environment live in `.env`,
+# which is gitignored.
+.env
+.env.local
+.env.*.local
+.pnpm-store/
