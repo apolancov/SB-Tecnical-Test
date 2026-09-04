@@ -1,0 +1,37 @@
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+WORKDIR /src
+
+# Copy project files first to optimize Docker layer caching
+COPY src/backend/Api/Api.csproj Api/
+COPY src/backend/Application/Application.csproj Application/
+COPY src/backend/Domain/Domain.csproj Domain/
+COPY src/backend/Infrastructure/Infrastructure.csproj Infrastructure/
+
+RUN dotnet restore Api/Api.csproj
+
+# Copy source code
+COPY src/backend/Api/ Api/
+COPY src/backend/Application/ Application/
+COPY src/backend/Domain/ Domain/
+COPY src/backend/Infrastructure/ Infrastructure/
+
+# Build and publish
+RUN dotnet publish Api/Api.csproj \
+    --configuration Release \
+    --output /app/publish \
+    --no-restore
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+WORKDIR /app
+
+COPY --from=build /app/publish .
+
+ENV HTTP_PORTS=8080
+
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "Api.dll"]

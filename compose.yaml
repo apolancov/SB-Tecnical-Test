@@ -1,0 +1,117 @@
+services:
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: project-sqlserver
+
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
+
+    ports:
+      - "1433:1433"
+
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost,1433 -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+    networks:
+      - project-network
+
+
+  database-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.database-init
+
+    container_name: project-database-init
+
+    environment:
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
+      SQL_DATABASE: "ApplicationDb"
+
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+    networks:
+      - project-network
+
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+
+    container_name: project-backend
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      HTTP_PORTS: "8080"
+
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=ApplicationDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+
+      Jwt__Issuer: ${JWT_ISSUER:-SB.Api}
+      Jwt__Audience: ${JWT_AUDIENCE:-SB.Client}
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-DEV_ONLY_DO_NOT_USE_IN_PRODUCTION_1234567890ABCDEF}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-60}
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - backend-data-protection-keys:/root/.aspnet/DataProtection-Keys
+
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+      database-init:
+        condition: service_completed_successfully
+
+    networks:
+      - project-network
+
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+
+    container_name: project-frontend
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      backend:
+        condition: service_started
+
+    networks:
+      - project-network
+
+
+volumes:
+
+  sqlserver-data:
+
+  backend-data-protection-keys:
+
+
+networks:
+
+  project-network:
+    driver: bridge

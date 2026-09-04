@@ -1,0 +1,30 @@
+# Database initialization image.
+#
+# Runs `schema.sql` and `seed.sql` against the SQL Server container after it
+# becomes healthy. The base image must provide `/opt/mssql-tools18/bin/sqlcmd`
+# (v18 of the SQL Server command-line tools).
+#
+# Historically this used `mcr.microsoft.com/mssql-tools18`, but that image
+# is not published on MCR (pull fails with "manifest tagged by \"latest\" is
+# not found"). The SQL Server image itself ships the same v18 sqlcmd at the
+# exact same path, so we reuse it as the base. This keeps `init.sh` unchanged
+# (it already invokes `/opt/mssql-tools18/bin/sqlcmd`) and avoids pulling a
+# non-existent image.
+FROM mcr.microsoft.com/mssql/server:2022-latest
+
+WORKDIR /scripts
+
+COPY --chown=mssql:mssql src/database/schema.sql ./schema.sql
+COPY --chown=mssql:mssql src/database/seed.sql ./seed.sql
+COPY --chown=mssql:mssql src/database/init.sh ./init.sh
+
+# Ensure the init script is executable for the mssql user that runs it.
+# `COPY` leaves files at mode 0644 by default, which would make crun refuse
+# to exec the entrypoint under the non-root `mssql` identity with
+# "OCI permission denied". Run as root (before USER mssql) so the chmod
+# applies regardless of who currently owns the file.
+RUN chmod 0755 ./init.sh && chmod 0644 ./schema.sql ./seed.sql
+
+USER mssql
+
+ENTRYPOINT ["./init.sh"]
